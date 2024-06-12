@@ -1,0 +1,64 @@
+from pyspark.sql import SparkSession
+import time
+
+spark = SparkSession.builder.config('spark.jars.packages', 'org.xerial:sqlite-jdbc:3.46.0.0').getOrCreate()
+df = spark.read.format('jdbc').options(driver='org.sqlite.JDBC', dbtable='Sales',url='jdbc:sqlite:/Sales_record.db').load()
+df.show()
+
+# Create operation
+from pyspark.sql import Row
+# Create a new row
+new_row = Row(Region = 'Asia', Country='Japane', Sold = 1111.1 , Price = 222.2, Cost=333.3, Profit=444.4)
+# Convert the Row into a DataFrame
+new_df = spark.createDataFrame([new_row], schema=df.schema)
+# Append the new DataFrame to the existing DataFrame
+df = df.union(new_df)
+# Show the updated DataFrame
+df.tail(5)
+
+# Read operation
+filtered_df = df.filter(df.Sold > 1000)
+# Search high Sold price.
+filtered_df.show()
+print("Sold higher 1000: ", filtered_df.count())
+
+# Update operation
+from pyspark.sql.functions import when
+# Update the last row column with Sold = 1
+df = df.withColumn('Sold', when((df.Region == 'Asia') & \
+                                 (df.Country == 'VN') & \
+				                 (df.Price == 2) & \
+				                 (df.Cost == 3) & \
+				                 (df.Profit == 4), 10000).otherwise(df.Sold))   
+# Show the updated DataFrame
+df.show(10)
+
+# Delete Operation
+df = df.filter(~((df.Region == 'Asia') &
+                 (df.Country == 'VN') & 
+                 (df.Sold == 10000) & 
+                 (df.Price == 2) & 
+                 (df.Cost == 3) & 
+                 (df.Profit == 4))) # Try delete the first row
+df.head(5)
+
+start_time = time.time()
+df.createOrReplaceTempView("Sales")
+spark.sql("SELECT * FROM Sales").show(10)
+end_time = time.time()
+print("execution time", end_time - start_time)
+
+start_time1 = time.time()
+spark.sql("SELECT * FROM Sales WHERE Sold > 1000").show(10)
+end_time1 = time.time()
+print("execution time1", end_time1 - start_time1)
+
+start_time2 = time.time()
+spark.sql("SELECT Country, SUM(Sold) as TotalValue FROM Sales WHERE Sold > 1000 GROUP BY Country").show(10)
+end_time2 = time.time()
+print("execution time2", end_time2 - start_time2)
+
+start_time3 = time.time()
+spark.sql("SELECT Country, SUM(Sold) as TotalValue FROM Sales WHERE Sold > 100 GROUP BY Country HAVING TotalValue > 15000").show(10)
+end_time3 = time.time()
+print("execution time3", end_time3 - start_time3)
